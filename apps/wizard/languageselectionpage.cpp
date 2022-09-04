@@ -23,7 +23,8 @@ void Wizard::LanguageSelectionPage::initializePage()
               << QLatin1String("Italian")
               << QLatin1String("Polish")
               << QLatin1String("Russian")
-              << QLatin1String("Spanish");
+              << QLatin1String("Spanish")
+              << QLatin1String("Chinese");
 
     languageComboBox->addItems(languages);
 }

@@ -28,7 +28,8 @@ Launcher::SettingsPage::SettingsPage(Files::ConfigurationManager &cfg,
               << tr("Italian")
               << tr("Polish")
               << tr("Russian")
-              << tr("Spanish");
+              << tr("Spanish")
+              << tr("Chinese");
 
     languageComboBox->addItems(languages);
 
@@ -256,6 +257,8 @@ void Launcher::SettingsPage::saveSettings()
         mGameSettings.setValue(QLatin1String("encoding"), QLatin1String("win1250"));
     } else if (language == QLatin1String("Russian")) {
         mGameSettings.setValue(QLatin1String("encoding"), QLatin1String("win1251"));
+    } else if (language == QLatin1String("Chinese")) {
+        mGameSettings.setValue(QLatin1String("encoding"), QLatin1String("gbk"));
     }  else {
         mGameSettings.setValue(QLatin1String("encoding"), QLatin1String("win1252"));
     }
