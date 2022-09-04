@@ -15,7 +15,8 @@ namespace ToUTF8
         WINDOWS_1251,      // Cyrillic languages
         WINDOWS_1252,       // Used by English version of Morrowind (and
             // probably others)
-        CP437           // Used for fonts (*.fnt) if data files encoding is 1252. Otherwise, uses the same encoding as the data files.
+        CP437,           // Used for fonts (*.fnt) if data files encoding is 1252. Otherwise, uses the same encoding as the data files.
+	    GBK // Chinese languages
     };
 
     enum class BufferAllocationPolicy
@@ -42,11 +43,13 @@ namespace ToUTF8
 
         private:
             inline std::pair<std::size_t, bool> getLength(std::string_view input) const;
+            inline std::size_t getLengthGBKCodec(std::string_view input) const;
             inline void copyFromArray(unsigned char chp, char* &out) const;
             inline std::pair<std::size_t, bool> getLengthLegacyEnc(std::string_view input) const;
             inline void copyFromArrayLegacyEnc(std::string_view::iterator& chp, std::string_view::iterator end, char* &out) const;
 
             const std::basic_string_view<signed char> mTranslationArray;
+            const FromType mSourceEncoding;
     };
 
     class Utf8Encoder

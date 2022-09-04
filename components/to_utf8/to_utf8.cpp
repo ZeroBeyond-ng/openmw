@@ -64,6 +64,8 @@ namespace
                 return {ToUTF8::windows_1251, std::size(ToUTF8::windows_1251)};
             case ToUTF8::CP437:
                 return {ToUTF8::cp437, std::size(ToUTF8::cp437)};
+            case ToUTF8::GBK:
+                return {ToUTF8::gbk, std::size(ToUTF8::gbk)};
         }
         throw std::logic_error("Invalid source encoding: " + std::to_string(sourceEncoding));
     }
@@ -98,7 +100,8 @@ namespace
 }
 
 StatelessUtf8Encoder::StatelessUtf8Encoder(FromType sourceEncoding)
-    : mTranslationArray(getTranslationArray(sourceEncoding))
+    : mTranslationArray(getTranslationArray(sourceEncoding)),
+      mSourceEncoding(sourceEncoding)
 {
 }
 
@@ -107,27 +110,64 @@ std::string_view StatelessUtf8Encoder::getUtf8(std::string_view input, BufferAll
     if (input.empty())
         return input;
 
-    // Note: The rest of this function is designed for single-character
-    // input encodings only. It also assumes that the input encoding
-    // shares its first 128 values (0-127) with ASCII. There are no plans
-    // to add more encodings to this module (we are using utf8 for new
-    // content files), so that shouldn't be an issue.
+    std::size_t outlen=1;
 
-    // Compute output length, and check for pure ascii input at the same
-    // time.
-    const auto [outlen, ascii] = getLength(input);
+    if(mSourceEncoding == ToUTF8::GBK) {
+        outlen = getLengthGBKCodec(input);
+    } else {
+        // Note: It is designed for single-character
+        // input encodings only. It also assumes that the input encoding
+        // shares its first 128 values (0-127) with ASCII. There are no plans
+        // to add more encodings to this module (we are using utf8 for new
+        // content files), so that shouldn't be an issue.
 
-    // If we're pure ascii, then don't bother converting anything.
-    if(ascii)
-        return std::string_view(input.data(), outlen);
+        // Compute output length, and check for pure ascii input at the same
+        // time.
+        const auto [outlen, ascii] = getLength(input);
+
+        // If we're pure ascii, then don't bother converting anything.
+        if(ascii)
+            return std::string_view(input.data(), outlen);
+    }
 
     // Make sure the output is large enough
     resize(outlen, bufferAllocationPolicy, buffer);
     char *out = buffer.data();
 
     // Translate
-    for (auto it = input.begin(); it != input.end() && *it != 0; ++it)
-        copyFromArray(*it, out);
+    if(mSourceEncoding == ToUTF8::GBK) {
+        for(auto it = input.begin(); it != input.end() && *it != 0;) {
+            if(static_cast<unsigned char>(*it) < 0x80) {
+            	*(out++) = *(it++);
+            } else if(static_cast<unsigned char>(*it) > 0x80 ) {
+                auto firstByte = static_cast<unsigned char>(*(it));
+                auto secondByte = static_cast<unsigned char>(*(it+1));
+		        
+                if(secondByte >= 0x40) {
+                    const signed char *in = &mTranslationArray[((firstByte - 0x80) * (0xFF - 0x40) + (secondByte - 0x40)) * 6];
+    	            int len = *(in++);
+                    memcpy(out, in, len);
+                    out += len;
+                    it = it + 2;
+                } else {
+                  char special[3] = {-30, -126, -84};
+                  int len = 3;
+                  memcpy(out, &(special[0]), len);
+                  out += len;
+                  ++it;
+                }
+            } else {
+                char special[3] = {-30, -126, -84};
+                int len = 3;
+                memcpy(out, &(special[0]), len);
+                out += len;
+                ++it;
+            }
+        }
+    } else {
+        for (auto it = input.begin(); it != input.end() && *it != 0; ++it)
+            copyFromArray(*it, out);
+    }
 
     // Make sure that we wrote the correct number of bytes
     assert((out - buffer.data()) == (int)outlen);
@@ -210,6 +250,37 @@ std::pair<std::size_t, bool> StatelessUtf8Encoder::getLength(std::string_view in
     while (it != input.end() && *it != 0);
 
     return {len, false};
+}
+
+std::size_t StatelessUtf8Encoder::getLengthGBKCodec(std::string_view input) const
+{
+    auto it = input.begin();
+    std::size_t len = 0;
+
+    while (it != input.end() && *it != 0) {
+        if(static_cast<unsigned char>(*it) < 0x80) {
+                ++it;
+                ++len;
+        } 
+        else if(static_cast<unsigned char>(*it) > 0x80) {
+            auto firstByte = static_cast<unsigned char>(*(it));
+            auto secondByte = static_cast<unsigned char>(*(it+1));
+
+            if(secondByte >= 0x40) {
+                len += mTranslationArray[((firstByte - 0x81) * (0xFF - 0x40) + (secondByte - 0x40)) * 6];
+                it = it + 2;
+            } else {
+                len += 3;
+                ++it;
+            }
+           
+        } else {
+           len += 3;
+           ++it;
+        }
+    }
+
+    return len;
 }
 
 // Translate one character 'ch' using the translation array 'arr', and
@@ -356,6 +427,8 @@ ToUTF8::FromType ToUTF8::calculateEncoding(std::string_view encodingName)
         return ToUTF8::WINDOWS_1251;
     else if (encodingName == "win1252")
         return ToUTF8::WINDOWS_1252;
+    else if (encodingName == "gbk")
+        return ToUTF8::GBK;
     else
         throw std::runtime_error("Unknown encoding '" + std::string(encodingName) + "', see openmw --help for available options.");
 }
@@ -368,6 +441,8 @@ std::string ToUTF8::encodingUsingMessage(std::string_view encodingName)
         return "Using Cyrillic font encoding.";
     else if (encodingName == "win1252")
         return "Using default (English) font encoding.";
+    else if (encodingName == "gbk")
+        return "Using GBK (Chinese) font encoding.";
     else
         throw std::runtime_error("Unknown encoding '" + std::string(encodingName) + "', see openmw --help for available options.");
 }
