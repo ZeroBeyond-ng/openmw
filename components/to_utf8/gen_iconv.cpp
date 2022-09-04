@@ -78,6 +78,71 @@ int write_table(const std::string &charset, const std::string &tableName)
   return 0;
 }
 
+int write_gbk_table(const std::string &charset, const std::string &tableName)
+{
+    // Write table header
+    std::cout << "const static signed char " << tableName << "[] =\n{\n";
+
+    // Open conversion system
+    iconv_t cd = iconv_open ("UTF-8", charset.c_str());
+    for(int i = 0; i < 0x80; i++) {
+        bool last = (i==255);
+
+        char input[2];
+        input[0] = i;
+        input[1] = 0;
+
+        char *iptr = input;
+        size_t ileft = 2;
+
+        char output[5];
+        for(int k=0; k<5; k++) output[k] = 0;
+        char *optr = output;
+        size_t oleft = 5;
+
+        size_t res = iconv(cd, &iptr, &ileft, &optr, &oleft);
+
+        if(res) writeMissing(last);
+        else writeChar(output, 5-oleft, last);
+    }
+
+    for(int i = 0x80; i < (0xFF - 0x40); i++) {
+        bool last = (i == 255);
+        writeMissing(last);
+    }
+
+    // Convert each character from 0 to 255
+    for(int i=0x81; i<0xFF; i++) {
+        for(int j = 0x40; j < 0xFF; j++) {
+            bool last = (i==255);
+
+            char input[2];
+            input[0] = i;
+            input[1] = j;
+
+            char *iptr = input;
+            size_t ileft = 2;
+
+            char output[5];
+            for(int k=0; k<5; k++) output[k] = 0;
+            char *optr = output;
+            size_t oleft = 5;
+
+            size_t res = iconv(cd, &iptr, &ileft, &optr, &oleft);
+
+            if(res) writeMissing(last);
+            else writeChar(output, 5-oleft, last);
+        }
+    }
+
+    iconv_close (cd);
+
+    // Finish table
+    std::cout << "};\n";
+
+    return 0;
+} 
+
 int main()
 {
   // Write header guard
@@ -106,6 +171,12 @@ int main()
   write_table("WINDOWS-1252", "windows_1252");
 
   write_table("CP437", "cp437");
+
+  // Chinese
+  std::cout << "\n/// GBK characters used by Chinese"
+               "\n";
+  
+  write_gbk_table("GBK", "gbk");
 
   // Close namespace
   std::cout << "\n}\n\n";
